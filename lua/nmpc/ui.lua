@@ -1,31 +1,10 @@
-local config = require("nmpc.config")
 local M = {}
+local config = require("nmpc.config")
 
-local function setup_hl()
-	local t = config.config.theme
-	local set = function(name, value)
-		vim.api.nvim_set_hl(0, name, value)
-	end
-
-	set("NmpcNormal",  { fg = t.foreground, bg = t.background })
-	set("NmpcBorder",  { fg = t.border,     bg = t.background })
-	set("NmpcTitle",   { fg = t.title,      bg = t.background, bold = true })
-	set("NmpcSelect",  { bg = t.selection })
-	set("NmpcPrompt",  { fg = t.prompt,     bg = t.background })
-end
-
-local WINHL = table.concat({
-	"Normal:NmpcNormal",
-	"NormalFloat:NmpcNormal",
-	"FloatBorder:NmpcBorder",
-	"FloatTitle:NmpcTitle",
-	"CursorLine:NmpcSelect",
-}, ",")
+-- forward declare
+local load_playlist
 
 function M.open()
-	-- preloading
-	setup_hl()
-
 	local width = math.floor(vim.o.columns * 0.6)
 	local out_height = math.floor(vim.o.lines * 0.5)
 	local in_height = 1 -- input field
@@ -64,13 +43,15 @@ function M.open()
 	})
 
 	-- colors
-	vim.wo[out_window].winhighlight = WINHL
-	vim.wo[in_window].winhighlight = WINHL
-	vim.wo[out_window].cursorline = true
+	config.style_window(in_window)
+	config.style_window(out_window)
 
 	-- making editable
-	local prompt = "> "
+	local prompt = " > "
 	vim.fn.prompt_setprompt(in_buffer, prompt)
+
+	-- update ui
+	load_playlist(out_buffer)
 
 	local function close()
 		vim.cmd("stopinsert")
@@ -86,6 +67,33 @@ function M.open()
 	vim.keymap.set("i", "<C-c>", close, opt)
 
 	vim.cmd("startinsert")
+end
+
+-- mpc commands+
+load_playlist = function (buf)
+	vim.system({ "mpc", "playlist" }, { text = true }, function (res)
+		vim.schedule(function ()
+			if not vim.api.nvim_buf_is_valid(buf) then
+				return
+			end
+			
+			-- try loading lines into buf
+			local lines
+			if res.code ~= 0 then
+				lines = { "mpc failed: " .. (res.stderr or "") }
+			else
+				lines = vim.split(
+					res.stdout, 
+					"\n", 
+					{ trimempty = true }
+				)
+			end
+
+			-- update everything
+			vim.api.nvim_buf_set_lines(buf, 0, -1, false, lines)
+		end)
+
+	end)
 end
 
 return M
