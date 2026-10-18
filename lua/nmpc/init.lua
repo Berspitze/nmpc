@@ -1,11 +1,8 @@
 local M = {}
 
-local config = require("nmpc.config")
-local commands = require("nmpc.commands")
-
 function M.setup(opts)
-	config.setup(opts)
-	commands.setup()
+	require("nmpc.config").setup(opts)
+	require("nmpc.commands").setup()
 end
 
 return M

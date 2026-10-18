@@ -1,6 +1,37 @@
 local M = {}
 
 M.config = {
+	general = {
+		seek_step = 10, -- seconds
+	},
+
+	keybinds = {
+		quit = "<Esc>",
+		help = "?",
+		toggle_pause = "z",
+		toggle_repeat = "x",
+
+		-- chnge songs
+		search = "/",
+		search_add = "<C-a>",
+		search_up = "<C-k>",
+		search_down = "<C-j>",
+
+		-- music commands
+		play = "p",
+		stop = "s",
+		next = ">",
+		prev = "<",
+		volume_up = ".",
+		volume_down = ",",
+		seek_forward = "l", -- prepend by number
+		seek_backward = "h", -- prepend by number
+		up = "k",
+		down = "j",
+		shuffle = "S",
+		random_fill = "X", -- prepend by number
+	},
+
 	theme = {
 		background = "None",
 		foreground = "#E2E2E3",
@@ -8,7 +39,7 @@ M.config = {
 		title      = "#9ED072",
 		selection  = "#3E445E",
 		prompt     = "#9ED072",
-	}
+	},
 }
 
 function M.setup(opts)

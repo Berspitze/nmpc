@@ -62,9 +62,8 @@ function M.open()
 		end
 	end
 
-	local opt = { buffer = in_buffer, nowait = true }
-	vim.keymap.set({ "i", "n" }, "<Esc>", close, opt)
-	vim.keymap.set("i", "<C-c>", close, opt)
+	local opt = { buffer = in_buffer, noremap = true, silent = true }
+	vim.keymap.set({ "i", "n" }, config.config.keybinds.quit, close, opt)
 
 	vim.cmd("startinsert")
 end
@@ -83,8 +82,8 @@ load_playlist = function (buf)
 				lines = { "mpc failed: " .. (res.stderr or "") }
 			else
 				lines = vim.split(
-					res.stdout, 
-					"\n", 
+					res.stdout,
+					"\n",
 					{ trimempty = true }
 				)
 			end
