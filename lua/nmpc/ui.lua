@@ -1,8 +1,11 @@
 local M = {}
 local config = require("nmpc.config")
+local mpd = require("nmpc.mpd")
 
 -- forward declare
 -- local search_window
+local close
+local choose
 local queue_list
 
 function M.queue_window()
@@ -13,15 +16,23 @@ function M.queue_window()
 
 	-- buffers for content
 	local buffer = vim.api.nvim_create_buf(false, true)
-
-	-- fill buffer with queue content
-	vim.api.nvim_buf_set_lines(buffer, 0, -1, false, queue_list())
-
-	vim.bo[buffer].modifiable = false
 	vim.bo[buffer].bufhidden = "wipe"
 
+	-- fill buffer with queue content
+	mpd.list_queue(function (error, response)
+		vim.schedule(function ()
+			if error then
+					vim.notify("List Queue Error: " .. error)
+				return
+			end
 
+			vim.bo[buffer].modifiable = true
+			vim.api.nvim_buf_set_lines(buffer, 0, -1, false, response)
+			vim.bo[buffer].modifiable = false
+		end)
+	end)
 
+	-- draw buffer to window
 	local window = vim.api.nvim_open_win(buffer, true, { -- takes focus
 		relative = "editor",
 		style = "minimal",
@@ -35,35 +46,26 @@ function M.queue_window()
 	vim.wo[window].cursorline = true
 	config.style_window(window)
 
-
-	local function close()
-		if vim.api.nvim_win_is_valid(window) then
-			vim.api.nvim_win_close(window, true)
-		end
-	end
-
-	local function choose()
-		local idx = vim.api.nvim_win_get_cursor(window)[1]
-		close()
-		vim.notify("You picked " .. queue_list()[idx])
-	end
-
-	local function map(lhs, fn)
-		vim.keymap.set("n", lhs, fn, { buffer = buffer, nowait = true })
-	end
-
-	map("<CR>", choose)
-	map("q", close)
-	map("<Esc>", close)
+	-- keymaps
+	vim.keymap.set("n", "<CR>", function ()
+		choose(window, buffer)
+	end)
+	vim.keymap.set("n", "<Esc>", function ()
+		close(window)
+	end)
+	-- ("<CR>", choose)
+	-- ("q", close)
+	-- ("<Esc>", close)
 end
 
--- local function search_window()
--- 	local width = math.floor(vim.o.columns * 0.6)
--- 	local height = math.floor(vim.o.lines * 0.5)
---
---
--- end
---
+local function search_window()
+	local width = math.floor(vim.o.columns * 0.6)
+	local height = math.floor(vim.o.lines * 0.5)
+
+
+
+end
+
 
 
 -- function M.open()
@@ -143,6 +145,19 @@ queue_list = function ()
 	end
 
 	return vim.split(res.stdout, "\n", { trimempty = true })
+end
+
+
+close = function (window)
+	if vim.api.nvim_win_is_valid(window) then
+		vim.api.nvim_win_close(window, true)
+	end
+end
+
+choose = function (window, buffer)
+	local idx = vim.api.nvim_win_get_cursor(window)[1]
+    local line = vim.api.nvim_buf_get_lines(buffer, idx - 1, idx, false)[1]
+	vim.notify("You picked " .. line)
 end
 
 return M

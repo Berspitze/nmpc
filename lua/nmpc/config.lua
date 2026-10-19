@@ -5,6 +5,11 @@ M.config = {
 		seek_step = 10, -- seconds
 	},
 
+	mpd = { -- specified in mpd.conf
+		bind_to_address = "127.0.0.1",
+		port = 6600,
+	},
+
 	keybinds = {
 		quit = "<Esc>",
 		help = "?",
