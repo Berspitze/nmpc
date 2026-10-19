@@ -15,12 +15,33 @@ function M.list_queue(callback)
 			return
 		end
 
-		local songs = vim.split(response, "\n", { trimempty = true })
-		local current_song = nil
+		-- format = { artist, title, time, id }
+		local song_list = {}
+		local song = {}
 
-		
+		for line in response:gmatch("[^\n]+") do
+			local artist = line:match("^Artist: (.*)$")
+			local title = line:match("^Title: (.*)$")
+			local time = line:match("^Time: (.*)$")
+			local id = line:match("^Id: (.*)$")
 
-		callback(nil, songs)
+			if artist then
+				song.artist = artist
+			end
+			if title then
+				song.title = title
+			end
+			if time then
+				song.time = time
+			end
+			if id then
+				song.id = id
+				table.insert(song_list, song)
+				song = {}
+			end
+		end
+
+		callback(nil, song_list)
 	end)
 end
 
