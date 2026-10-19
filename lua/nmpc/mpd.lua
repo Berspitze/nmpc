@@ -45,6 +45,18 @@ function M.list_queue(callback)
 	end)
 end
 
+function M.play(id, callback)
+	send_command("playid " .. id, function (error, response)
+		callback(error, response)
+	end)
+end
+
+function M.stop(callback)
+	send_command("stop", function (error, response)
+		callback(error, response)
+	end)
+end
+
 ---Connect, send one command, return responce or error
 ---@param command string? must be valid MPD command: https://mpd.readthedocs.io/en/latest/protocol.html
 ---@param callback function(response)? required for async nature of uv.net_tcp

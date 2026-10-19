@@ -6,7 +6,6 @@ local mpd = require("nmpc.mpd")
 local queue = {}
 
 -- forward declare
-local close
 local choose
 
 function M.queue_window()
@@ -21,12 +20,12 @@ function M.queue_window()
 
 	-- fill buffer with queue content
 	mpd.list_queue(function (error, response)
-		if error then
-			vim.notify("List Queue Error: " .. error)
-			return
-		end
-
 		vim.schedule(function ()
+			if error then
+				vim.notify("List Queue Error: " .. error)
+				return
+			end
+
 			queue = response
 
 			local display_lines = {}
@@ -58,9 +57,7 @@ function M.queue_window()
 	vim.keymap.set("n", "<CR>", function ()
 		choose(window, buffer)
 	end)
-	vim.keymap.set("n", "<Esc>", function ()
-		close(window)
-	end)
+	require("nmpc.keybind").setup_queue_window(window, buffer)
 end
 
 local function search_window()
@@ -138,16 +135,21 @@ end
 --
 -- -- draw search
 
-close = function (window)
-	if vim.api.nvim_win_is_valid(window) then
-		vim.api.nvim_win_close(window, true)
-	end
-end
-
 choose = function (window, buffer)
 	local idx = vim.api.nvim_win_get_cursor(window)[1]
     local line = vim.api.nvim_buf_get_lines(buffer, idx - 1, idx, false)[1]
-	vim.notify("[" .. queue[idx].id .. "] " .. line)
+
+	local id = queue[idx].id
+
+	mpd.play(id, function (error, _response)
+		vim.schedule(function ()
+			if not error then
+				vim.notify("Now playing: " .. line)
+			else
+				vim.notify("Cant play: " .. line)
+			end
+		end)
+	end)
 end
 
 return M
