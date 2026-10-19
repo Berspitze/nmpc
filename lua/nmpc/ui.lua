@@ -141,7 +141,7 @@ choose = function (window, buffer)
 
 	local id = queue[idx].id
 
-	mpd.play(id, function (error, _response)
+	mpd.play(id, function (error)
 		vim.schedule(function ()
 			if not error then
 				vim.notify("Now playing: " .. line)

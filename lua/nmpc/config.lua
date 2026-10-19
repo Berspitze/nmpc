@@ -3,6 +3,7 @@ local M = {}
 M.config = {
 	general = {
 		seek_step = 10, -- seconds
+		volume_step = 1, -- 0-100 vol, inc/dec by n
 	},
 
 	mpd = { -- specified in mpd.conf

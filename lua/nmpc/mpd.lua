@@ -46,14 +46,51 @@ function M.list_queue(callback)
 end
 
 function M.play(id, callback)
-	send_command("playid " .. id, function (error, response)
-		callback(error, response)
+	send_command("playid " .. id, function (error, _)
+		callback(error)
 	end)
 end
 
 function M.stop(callback)
-	send_command("stop", function (error, response)
-		callback(error, response)
+	send_command("stop", function (error, _)
+		callback(error)
+	end)
+end
+
+---Increments volume +n/-n
+---
+---@param n integer? signed int for inc/dec volume
+---@param callback function(error, response)? response holds int
+function M.change_volume(n, callback)
+	send_command("status", function (error, response)
+		if error then
+			callback(error, nil)
+			return
+		end
+
+		local volume
+		for line in response:gmatch("[^\n]+") do
+			volume = line:match("^volume: (.*)$")
+
+			if volume then
+				break
+			end
+		end
+
+		if not volume then
+			callback("Couldn't parse volume", nil)
+			return
+		end
+
+		local new_volume = math.max(0, math.min(100, tonumber(volume) + n))
+		send_command("setvol " .. new_volume, function (volume_error, volume_response)
+			if volume_error then
+				callback(volume_error, volume_response)
+				return
+			end
+
+			callback(nil, tostring(new_volume))
+		end)
 	end)
 end
 
