@@ -9,7 +9,12 @@ M.config = {
 		header = { "title", "artist", "time" },
 		sizes = { "50%", "40%", 5 }, -- percentage based
 		alignment = { "left", "left", "right"},
-		color = { "#ff0000", "#00ff00", "#0000ff" }
+		color = { "#DB9558", "#4F5B2A", "#D8C9A8" }
+	},
+	window_search_format = { -- searches by title + artist
+		sizes = { "50%", "50%" },
+		alignment = { "left", "left" },
+		color = { "#DB9558", "#4F5B2A" },
 	},
 
 	mpd = { -- specified in mpd.conf

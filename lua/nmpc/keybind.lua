@@ -22,10 +22,10 @@ function M.setup_queue_window(window, buffer)
 	-- toggle_repeat = "x",
 	--
 	-- -- chnge songs
-	-- search = "/",
-	-- search_add = "<C-a>",
-	-- search_up = "<C-k>",
-	-- search_down = "<C-j>",
+	vim.keymap.set("n", keybinds.search, function ()
+		require("nmpc.ui").search_window()
+	end)
+
 	--
 	-- -- music commands
 	-- vim.keymap.set("n", keybinds.play, function ()
@@ -75,6 +75,18 @@ function M.setup_queue_window(window, buffer)
 	-- down = "j",
 	-- shuffle = "S",
 	-- random_fill = "X", -- prepend by number
+end
+
+function M.setup_search_window(window, buffer) 
+	vim.keymap.set("n", "<C-a>", function ()
+		
+	end)
+	vim.keymap.set("n", "<C-k>", function ()
+		
+	end)
+	vim.keymap.set("n", "<C-j>", function ()
+		
+	end)
 end
 
 return M

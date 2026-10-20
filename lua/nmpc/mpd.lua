@@ -6,6 +6,44 @@ local send_command
 
 -- commands: playlistinfo, next, prev, play, volume $n,
 
+function M.list_all(callback)
+	send_command("listallinfo", function (error, response)
+		if error then
+			callback(error, nil)
+			return
+		end
+
+		if not response then
+			callback("Empty response from MPD", nil)
+			return
+		end
+
+		-- format = { artist, title, time, id }
+		local song_list = {}
+		local song = {}
+
+		for line in response:gmatch("[^\n]+") do
+			local file = line:match("^file: (.*)$")
+			local artist = line:match("^Artist: (.*)$")
+			local title = line:match("^Title: (.*)$")
+
+			if file then
+				song.file = file
+			end
+			if artist then
+				song.artist = artist
+			end
+			if title then
+				song.title = title
+				table.insert(song_list, song)
+				song = {}
+			end
+		end
+
+		callback(nil, song_list)
+	end)
+end
+
 ---Handles and formats playlistinfo command
 ---@param callback function(error, response)? response holds formatted data
 function M.list_queue(callback)
