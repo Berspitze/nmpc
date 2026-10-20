@@ -1,6 +1,7 @@
 local M = {}
 local config = require("nmpc.config")
 local mpd = require("nmpc.mpd")
+local pad_string = require("nmpc.util").pad_string
 
 -- stores all songs
 local queue = {}
@@ -25,17 +26,86 @@ function M.queue_window()
 				vim.notify("List Queue Error: " .. error)
 				return
 			end
+			if not response then
+				vim.notify("List queue got no response")
+				return
+			end
 
 			queue = response
 
-			local display_lines = {}
-			for i, item in ipairs(queue) do
-				display_lines[i] = item.artist .. " - " .. item.title
+			-- sizes match window_format.sizes
+			local sizes = {}
+			local fixed_width = 0
+			local percent_total = 0
+
+			-- calculate fixed and percentage widths
+			for i, item in ipairs(config.config.window_format.sizes) do
+				if type(item) == "string" then
+					local percent = tonumber(item:match("^(%d+)%%"))
+					sizes[i] = percent
+					percent_total = percent_total + percent
+				else
+					sizes[i] = item
+					fixed_width = fixed_width + item
+				end
 			end
+
+			-- distribute remaining width among percent columns
+			local available_width = width - fixed_width - (#sizes - 1)
+			for i, item in ipairs(config.config.window_format.sizes) do
+				if type(item) == "string" then
+					sizes[i] = math.floor(available_width * sizes[i] / percent_total)
+				end
+			end
+
+			-- format each row
+			local display_lines = {}
+
+			for i, entry in ipairs(queue) do
+				local fmt = {}
+
+				for j, header in ipairs(config.config.window_format.header) do
+					fmt[j] = pad_string(
+						tostring(entry[header] or ""),
+						sizes[j],
+						config.config.window_format.alignment[j]
+					)
+				end
+
+				display_lines[i] = table.concat(fmt, " ")
+			end
+
+			-- namespace for coloring
+			local queue_ns = vim.api.nvim_create_namespace("nmpc_queue")
+			vim.api.nvim_buf_clear_namespace(buffer, queue_ns, 0, -1)
 
 			vim.bo[buffer].modifiable = true
 			vim.api.nvim_buf_set_lines(buffer, 0, -1, false, display_lines)
 			vim.bo[buffer].modifiable = false
+
+			-- TODO: FIX LATER
+			-- each column is width bound -> easy coloring
+			for row, _ in ipairs(display_lines) do
+				local column = 0
+				for i, size in ipairs(sizes) do
+					local start_column = column
+					local end_column = start_column + #pad_string(
+						tostring(queue[row][config.config.window_format.header[i]] or ""),
+						size,
+						config.config.window_format.alignment[i]
+					)
+					vim.api.nvim_buf_set_extmark(buffer, queue_ns, 
+						row - 1, 
+						start_column, 
+						{
+							end_row = row - 1,
+							end_col = end_column,
+							hl_group = "NmpcHeader" .. i,
+						}
+					)
+					column = end_column + 1
+				end
+			end
 		end)
 	end)
 

@@ -15,6 +15,11 @@ function M.list_queue(callback)
 			return
 		end
 
+		if not response then
+			callback("Empty response from MPD", nil)
+			return
+		end
+
 		-- format = { artist, title, time, id }
 		local song_list = {}
 		local song = {}
@@ -22,7 +27,7 @@ function M.list_queue(callback)
 		for line in response:gmatch("[^\n]+") do
 			local artist = line:match("^Artist: (.*)$")
 			local title = line:match("^Title: (.*)$")
-			local time = line:match("^Time: (.*)$")
+			local duration = line:match("^duration: (.*)$")
 			local id = line:match("^Id: (.*)$")
 
 			if artist then
@@ -31,8 +36,8 @@ function M.list_queue(callback)
 			if title then
 				song.title = title
 			end
-			if time then
-				song.time = time
+			if duration then
+				song.time = duration
 			end
 			if id then
 				song.id = id
@@ -65,6 +70,11 @@ function M.change_volume(n, callback)
 	send_command("status", function (error, response)
 		if error then
 			callback(error, nil)
+			return
+		end
+
+		if not response then
+			callback("Couldn't get output from mpd status", nil)
 			return
 		end
 
@@ -119,7 +129,10 @@ send_command = function (command, callback)
 
 		if not socket:is_closing() then
 			socket:read_stop()
-			socket:close()
+			-- defer close, failed before
+			vim.schedule(function ()
+				socket:close()
+			end)
 		end
 
 		vim.schedule(function ()

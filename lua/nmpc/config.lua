@@ -2,8 +2,14 @@ local M = {}
 
 M.config = {
 	general = {
-		seek_step = 10, -- seconds
 		volume_step = 1, -- 0-100 vol, inc/dec by n
+	},
+
+	window_format = { -- only supports: 'title', 'artist', 'time' as input
+		header = { "title", "artist", "time" },
+		sizes = { "50%", "40%", 5 }, -- percentage based
+		alignment = { "left", "left", "right"},
+		color = { "#ff0000", "#00ff00", "#0000ff" }
 	},
 
 	mpd = { -- specified in mpd.conf
@@ -55,8 +61,10 @@ function M.setup(opts)
         opts or {}
     )
 
-	M.setup_hl()
+	-- check for validity of config
 
+	-- coloring window
+	M.setup_hl()
 	local group = vim.api.nvim_create_augroup(
         "NmpcHighlights",
         { clear = true }
@@ -77,6 +85,12 @@ function M.setup_hl()
 	vim.api.nvim_set_hl(0, "NmpcTitle",   { fg = t.title,      bg = t.background, bold = true })
 	vim.api.nvim_set_hl(0, "NmpcSelect",  { bg = t.selection })
 	vim.api.nvim_set_hl(0, "NmpcPrompt",  { fg = t.prompt,     bg = t.background })
+
+	for i, _ in ipairs(M.config.window_format.header) do
+		vim.api.nvim_set_hl(0, "NmpcHeader" .. i, {
+			fg = M.config.window_format.color[i]
+		})
+	end
 end
 
 function M.style_window(win)
