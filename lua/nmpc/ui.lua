@@ -135,13 +135,17 @@ end
 
 function M.search_window()
 	local width  = math.floor(vim.o.columns * 0.6)
-	local height = math.floor(vim.o.lines * 0.5)
+	local input_height = 1
+	local result_height = math.floor(vim.o.lines * 0.5) - input_height - 2
 	local x      = math.floor((vim.o.columns - width) / 2)
-	local y      = math.floor((vim.o.lines - height) / 2)
+	local y      = math.floor((vim.o.lines - result_height) / 2)
 
-	local buffer = vim.api.nvim_create_buf(false, true)
-	vim.bo[buffer].bufhidden = "wipe"
+	local input_buffer = vim.api.nvim_create_buf(false, true)
+	local result_buffer = vim.api.nvim_create_buf(false, true)
+	vim.bo[input_buffer].bufhidden = "wipe"
 
+
+	-- setup get all songs in mpd
 	mpd.list_all(function (error, response)
 		vim.schedule(function ()
 			if error then
@@ -186,7 +190,20 @@ function M.search_window()
 		end)
 	end)
 
-	local window = vim.api.nvim_open_win(buffer, true, { -- take focus from queue
+	-- update from search
+	local function update()
+		local input = vim.api.nvim_buf_get_lines(input_buffer, 0, 1, false)[1] or ""
+		local lines = {}
+	end
+
+	vim.api.nvim_create_autocmd({ 'TextChanged', 'TextChangedI' }, {
+		buffer = input_buf,
+		callback = update,
+	})
+
+	local input_window = vim.api.nvim_open_win(buffer, true)
+
+	local result_window = vim.api.nvim_open_win(buffer, true, { -- take focus from queue
 		relative = "editor",
 		style = "minimal",
 		border = "rounded",
