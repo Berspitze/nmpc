@@ -7,7 +7,7 @@ local mpd = require("nmpc.mpd")
 function M.setup()
 	local ui = require("nmpc.ui")
 	vim.api.nvim_create_user_command("Nmpc", function ()
-		ui.queue_window()
+		ui.open()
 	end, {})
 end
 
@@ -77,7 +77,14 @@ function M.setup_queue_window(window, buffer)
 	-- random_fill = "X", -- prepend by number
 end
 
-function M.setup_search_window(window, buffer) 
+function M.setup_search_window(windows, buffers) 
+	vim.keymap.set({ "i", "n" }, "<Esc>", function ()
+		for _, window in ipairs(windows) do
+			if vim.api.nvim_win_is_valid(window) then
+				vim.api.nvim_win_close(window, true)
+			end
+		end
+	end)
 	vim.keymap.set("n", "<C-a>", function ()
 		
 	end)

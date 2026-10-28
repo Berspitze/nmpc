@@ -2,118 +2,125 @@ local M = {}
 local config = require("nmpc.config")
 local mpd = require("nmpc.mpd")
 local util = require("nmpc.util")
-local pad_string = require("nmpc.util").pad_string
+local song_entry = require("nmpc.song_entry")
+local keybind    = require("nmpc.keybind")
 
--- stores all songs
+---stores viewable songs in queue
+---@type integer id relates to song_entry_list
 local queue = {}
+
+---stores viewable songs in search
+---@type [integer, integer] 0: idx into song_entry_list, 1: play(id, _)
 local search = {}
-local all_songs = {}
 
--- forward declare
-local choose
+---stores all songs with metadata
+---sorted by .title, .artist, .genre(whole string, not split)
+---@type SongEntry all necessary song information
+local song_entry_list = {}
 
-function M.queue_window()
-	local width  = math.floor(vim.o.columns * 0.6)
-	local height = math.floor(vim.o.lines * 0.5)
-	local x      = math.floor((vim.o.columns - width) / 2)
-	local y      = math.floor((vim.o.lines - height) / 2)
+local state = {
+	current_state = nil, -- "queue", "search", nil
+	last_state = "queue",
+	queue = { buffer = nil, window = nil },
+	search = {
+		input_buffer = nil, input_window = nil,
+		result_buffer = nil, result_window = nil,
+	},
+}
 
-	-- buffers for content
-	local buffer = vim.api.nvim_create_buf(false, true)
-	vim.bo[buffer].bufhidden = "wipe"
 
-	-- fill buffer with queue content
-	mpd.list_queue(function (error, response)
+-- ----- Updating Contents -----
+
+function M.init_mpd_data()
+
+	-- gets all songs, sorts, then stores
+	-- sorting helps with binary search for and song search
+	mpd.list_all(function (error, response)
 		vim.schedule(function ()
 			if error then
-				vim.notify("List Queue Error: " .. error)
-				return
-			end
-			if not response then
-				vim.notify("List queue got no response")
-				return
+				vim.print("Init MPD failed: \n" .. error)
 			end
 
-			queue = response
+			song_entry_list = response
 
-			-- sizes match window_format.sizes
-			local sizes = {}
-			local fixed_width = 0
-			local percent_total = 0
-
-			-- calculate fixed and percentage widths
-			for i, item in ipairs(config.config.window_format.sizes) do
-				if type(item) == "string" then
-					local percent = tonumber(item:match("^(%d+)%%"))
-					sizes[i] = percent
-					percent_total = percent_total + percent
-				else
-					sizes[i] = item
-					fixed_width = fixed_width + item
+			-- titiel, artist, genre
+			table.sort(song_entry_list, function (a, b)
+				if a.title == b.title then
+					if a.artist == b.artist then
+						if a.genre == b.genre then
+							vim.print("Duplicate Song: " .. a)
+							return true
+						elseif a.genre < b.genre then
+							return true
+						elseif a.genre > b.genre then
+							return false
+						end
+					elseif a.artist < b.artist then
+						return true
+					elseif a.artist > b.artist then
+						return false
+					end
+				elseif a.title < b.title then
+					return true
+				elseif a.title > b.title then
+					return false
 				end
-			end
+			end)
 
-			-- distribute remaining width among percent columns
-			local available_width = width - fixed_width - (#sizes - 1)
-			for i, item in ipairs(config.config.window_format.sizes) do
-				if type(item) == "string" then
-					sizes[i] = math.floor(available_width * sizes[i] / percent_total)
-				end
-			end
-
-			-- format each row
-			local display_lines = {}
-
-			for i, entry in ipairs(queue) do
-				local fmt = {}
-
-				for j, header in ipairs(config.config.window_format.header) do
-					fmt[j] = pad_string(
-						tostring(entry[header] or ""),
-						sizes[j],
-						config.config.window_format.alignment[j]
-					)
-				end
-
-				display_lines[i] = table.concat(fmt, " ")
-			end
-
-			-- namespace for coloring
-			local queue_ns = vim.api.nvim_create_namespace("nmpc_queue")
-			vim.api.nvim_buf_clear_namespace(buffer, queue_ns, 0, -1)
-
-			vim.bo[buffer].modifiable = true
-			vim.api.nvim_buf_set_lines(buffer, 0, -1, false, display_lines)
-			vim.bo[buffer].modifiable = false
-
-			-- TODO: FIX LATER
-			-- each column is width bound -> easy coloring
-			for row, _ in ipairs(display_lines) do
-				local column = 0
-				for i, size in ipairs(sizes) do
-					local start_column = column
-					local end_column = start_column + #pad_string(
-						tostring(queue[row][config.config.window_format.header[i]] or ""),
-						size,
-						config.config.window_format.alignment[i]
-					)
-					vim.api.nvim_buf_set_extmark(buffer, queue_ns,
-						row - 1,
-						start_column,
-						{
-							end_row = row - 1,
-							end_col = end_column,
-							hl_group = "NmpcHeader" .. i,
-						}
-					)
-					column = end_column + 1
-				end
-			end
+			
 		end)
 	end)
 
-	-- draw buffer to window
-	local window = vim.api.nvim_open_win(buffer, true, { -- takes focus
+	mpd.list_queue(function (error, response)
+		vim.schedule(function ()
+			if error then
+				vim.print("Init MPD failed: \n" .. error)
+			end
+		end)
+	end)
+end
+
+function M.refresh_queue()
+end
+
+function M.update_search()
+end
+
+function M.set_window_queue()
+end
+
+function M.set_window_search()
+end
+
+-- ----- Ui State -----
+
+function M.open()
+	local width  = math.floor(vim.o.columns * 0.6)
+	local height = math.floor(vim.o.lines * 0.5)
+	local x = math.floor((vim.o.columns - width) / 2)
+	local y = math.floor((vim.o.lines - height) / 2)
+
+	M.init_mpd_data()
+
+	-- already open, just focus it
+	if util.valid_win(state.current_queue.window) then
+		-- update if term has changed
+		vim.w[state.current_queue.window].width = width
+		vim.w[state.current_queue.window].height = height
+		vim.w[state.current_queue.window].x = x
+		vim.w[state.current_queue.window].y = y
+
+		-- set window to render
+		vim.api.nvim_set_current_win(state.current_queue.window)
+
+		return
+	end
+
+	-- initialize for first time then
+	local buffer = vim.api.nvim_create_buf(false, true)
+	state.current_queue.buffer = buffer
+
+	state.queue.window = vim.api.nvim_open_win(buffer, true, {
 		relative = "editor",
 		style = "minimal",
 		border = "rounded",
@@ -123,117 +130,267 @@ function M.queue_window()
 		row = y,
 		title = " Queue ",
 	})
-	vim.wo[window].cursorline = true
-	config.style_window(window)
 
-	-- keymaps
-	vim.keymap.set("n", "<CR>", function ()
-		choose(window, buffer)
-	end)
-	require("nmpc.keybind").setup_queue_window(window, buffer)
-end
-
-function M.search_window()
-	local width  = math.floor(vim.o.columns * 0.6)
-	local input_height = 1
-	local result_height = math.floor(vim.o.lines * 0.5) - input_height - 2
-	local x      = math.floor((vim.o.columns - width) / 2)
-	local y      = math.floor((vim.o.lines - result_height) / 2)
-
-	local input_buffer = vim.api.nvim_create_buf(false, true)
-	local result_buffer = vim.api.nvim_create_buf(false, true)
-	vim.bo[input_buffer].bufhidden = "wipe"
-
-
-	-- setup get all songs in mpd
-	mpd.list_all(function (error, response)
-		vim.schedule(function ()
-			if error then
-				vim.notify("List All Error: " .. error)
-				return
-			end
-			if not response then
-				vim.notify("List all got no response")
-				return
-			end
-
-			all_songs = response
-			search = all_songs
-
-			-- format each row
-			local sizes = util.split_length(
-				width,
-				config.config.window_search_format.sizes
-			)
-			local display_lines = {}
-
-			-- start by printing all songs
-			for i, entry in ipairs(all_songs) do
-				local fmt = {}
-
-				for j, header in ipairs(config.config.window_format.header) do
-					fmt[j] = pad_string(
-						tostring(entry[header] or ""),
-						sizes[j],
-						config.config.window_search_format.alignment[j]
-					)
+	vim.api.nvim_create_autocmd("BufWipeout", {
+		buffer = buffer,
+		once = true,
+		callback = function ()
+			vim.schedule(function ()
+				if state.queue.buffer == buffer then
+					M.close()
 				end
-
-				display_lines[i] = table.concat(fmt, " ")
-			end
-
-			vim.bo[buffer].modifiable = true
-			vim.api.nvim_buf_set_lines(buffer, 0, -1, false, display_lines)
-			vim.bo[buffer].modifiable = false
-
-
-		end)
-	end)
-
-	-- update from search
-	local function update()
-		local input = vim.api.nvim_buf_get_lines(input_buffer, 0, 1, false)[1] or ""
-		local lines = {}
-	end
-
-	vim.api.nvim_create_autocmd({ 'TextChanged', 'TextChangedI' }, {
-		buffer = input_buf,
-		callback = update,
+			end)
+		end,
 	})
-
-	local input_window = vim.api.nvim_open_win(buffer, true)
-
-	local result_window = vim.api.nvim_open_win(buffer, true, { -- take focus from queue
-		relative = "editor",
-		style = "minimal",
-		border = "rounded",
-		width = width,
-		height = height,
-		row = y,
-		col = x,
-		title = " Search ",
-	})
-	vim.wo[window].cursorline = true
-	config.style_window(window)
-
-	require("nmpc.keybind").setup_search_window(window, buffer)
 end
 
-choose = function (window, buffer)
-	local idx = vim.api.nvim_win_get_cursor(window)[1]
-    local line = vim.api.nvim_buf_get_lines(buffer, idx - 1, idx, false)[1]
-
-	local id = queue[idx].id
-
-	mpd.play(id, function (error)
-		vim.schedule(function ()
-			if not error then
-				vim.notify("Now playing: " .. line)
-			else
-				vim.notify("Cant play: " .. line)
-			end
-		end)
-	end)
-end
+-- function M.queue_window()
+-- 	local width  = math.floor(vim.o.columns * 0.6)
+-- 	local height = math.floor(vim.o.lines * 0.5)
+-- 	local x      = math.floor((vim.o.columns - width) / 2)
+-- 	local y      = math.floor((vim.o.lines - height) / 2)
+--
+-- 	-- buffers for content
+-- 	local buffer = vim.api.nvim_create_buf(false, true)
+-- 	vim.bo[buffer].bufhidden = "wipe"
+--
+-- 	-- fill buffer with queue content
+-- 	mpd.list_queue(function (error, response)
+-- 		vim.schedule(function ()
+-- 			if error then
+-- 				vim.notify("List Queue Error: " .. error)
+-- 				return
+-- 			end
+-- 			if not response then
+-- 				vim.notify("List queue got no response")
+-- 				return
+-- 			end
+--
+-- 			queue = response
+--
+-- 			-- sizes match window_format.sizes
+-- 			local sizes = {}
+-- 			local fixed_width = 0
+-- 			local percent_total = 0
+--
+-- 			-- calculate fixed and percentage widths
+-- 			for i, item in ipairs(config.config.window_format.sizes) do
+-- 				if type(item) == "string" then
+-- 					local percent = tonumber(item:match("^(%d+)%%"))
+-- 					sizes[i] = percent
+-- 					percent_total = percent_total + percent
+-- 				else
+-- 					sizes[i] = item
+-- 					fixed_width = fixed_width + item
+-- 				end
+-- 			end
+--
+-- 			-- distribute remaining width among percent columns
+-- 			local available_width = width - fixed_width - (#sizes - 1)
+-- 			for i, item in ipairs(config.config.window_format.sizes) do
+-- 				if type(item) == "string" then
+-- 					sizes[i] = math.floor(available_width * sizes[i] / percent_total)
+-- 				end
+-- 			end
+--
+-- 			-- format each row
+-- 			local display_lines = {}
+--
+-- 			for i, entry in ipairs(queue) do
+-- 				local fmt = {}
+--
+-- 				for j, header in ipairs(config.config.window_format.header) do
+-- 					fmt[j] = pad_string(
+-- 						tostring(entry[header] or ""),
+-- 						sizes[j],
+-- 						config.config.window_format.alignment[j]
+-- 					)
+-- 				end
+--
+-- 				display_lines[i] = table.concat(fmt, " ")
+-- 			end
+--
+-- 			-- namespace for coloring
+-- 			local queue_ns = vim.api.nvim_create_namespace("nmpc_queue")
+-- 			vim.api.nvim_buf_clear_namespace(buffer, queue_ns, 0, -1)
+--
+-- 			vim.bo[buffer].modifiable = true
+-- 			vim.api.nvim_buf_set_lines(buffer, 0, -1, false, display_lines)
+-- 			vim.bo[buffer].modifiable = false
+--
+-- 			-- TODO: FIX LATER
+-- 			-- each column is width bound -> easy coloring
+-- 			for row, _ in ipairs(display_lines) do
+-- 				local column = 0
+-- 				for i, size in ipairs(sizes) do
+-- 					local start_column = column
+-- 					local end_column = start_column + #pad_string(
+-- 						tostring(queue[row][config.config.window_format.header[i]] or ""),
+-- 						size,
+-- 						config.config.window_format.alignment[i]
+-- 					)
+-- 					vim.api.nvim_buf_set_extmark(buffer, queue_ns,
+-- 						row - 1,
+-- 						start_column,
+-- 						{
+-- 							end_row = row - 1,
+-- 							end_col = end_column,
+-- 							hl_group = "NmpcHeader" .. i,
+-- 						}
+-- 					)
+-- 					column = end_column + 1
+-- 				end
+-- 			end
+-- 		end)
+-- 	end)
+--
+-- 	-- draw buffer to window
+-- 	local window = vim.api.nvim_open_win(buffer, true, { -- takes focus
+-- 		relative = "editor",
+-- 		style = "minimal",
+-- 		border = "rounded",
+-- 		width = width,
+-- 		height = height,
+-- 		col = x,
+-- 		row = y,
+-- 		title = " Queue ",
+-- 	})
+-- 	vim.wo[window].cursorline = true
+-- 	config.style_window(window)
+--
+-- 	-- keymaps
+-- 	vim.keymap.set("n", "<CR>", function ()
+-- 		choose(window, buffer)
+-- 	end)
+-- 	require("nmpc.keybind").setup_queue_window(window, buffer)
+-- end
+--
+-- function M.search_window()
+-- 	local width  = math.floor(vim.o.columns * 0.6)
+-- 	local input_height = 1
+-- 	local result_height = math.floor(vim.o.lines * 0.5) - input_height - 2
+-- 	local x      = math.floor((vim.o.columns - width) / 2)
+-- 	local y      = math.floor((vim.o.lines - result_height) / 2)
+--
+-- 	local input_buffer = vim.api.nvim_create_buf(false, true)
+-- 	local result_buffer = vim.api.nvim_create_buf(false, true)
+-- 	vim.bo[input_buffer].bufhidden = "wipe"
+--
+--
+-- 	-- setup get all songs in mpd
+-- 	mpd.list_all(function (error, response)
+-- 		vim.schedule(function ()
+-- 			if error then
+-- 				vim.notify("List All Error: " .. error)
+-- 				return
+-- 			end
+-- 			if not response then
+-- 				vim.notify("List all got no response")
+-- 				return
+-- 			end
+--
+-- 			all_songs = response
+-- 			search = all_songs
+--
+-- 			-- format each row
+-- 			local sizes = util.split_length(
+-- 				width,
+-- 				config.config.window_search_format.sizes
+-- 			)
+-- 			local display_lines = {}
+--
+-- 			-- start by printing all songs
+-- 			for i, entry in ipairs(all_songs) do
+-- 				local fmt = {}
+--
+-- 				for j, header in ipairs(config.config.window_format.header) do
+-- 					fmt[j] = pad_string(
+-- 						tostring(entry[header] or ""),
+-- 						sizes[j],
+-- 						config.config.window_search_format.alignment[j]
+-- 					)
+-- 				end
+--
+-- 				display_lines[i] = table.concat(fmt, " ")
+-- 			end
+--
+-- 			vim.bo[result_buffer].modifiable = true
+-- 			vim.api.nvim_buf_set_lines(result_buffer, 0, -1, false, display_lines)
+-- 			vim.bo[result_buffer].modifiable = false
+--
+--
+-- 		end)
+-- 	end)
+--
+-- 	-- update from search
+-- 	local function update()
+-- 		local input = vim.api.nvim_buf_get_lines(input_buffer, 0, 1, false)[1] or ""
+-- 		local lines = util.search(input, all_songs)
+--
+-- 		vim.bo[result_buffer].modifiable = true
+-- 		vim.api.nvim_buf_set_lines(result_buffer, 0, -1, false, lines)
+-- 		vim.bo[result_buffer].modifiable = false
+--
+-- 		-- TODO: reapply highlighting
+-- 	end
+--
+-- 	-- input then update
+-- 	vim.api.nvim_create_autocmd({ 'TextChanged', 'TextChangedI' }, {
+-- 		buffer = input_buffer,
+-- 		callback = update,
+-- 	})
+--
+-- 	local input_window = vim.api.nvim_open_win(input_buffer, true, {
+-- 		relative = "editor",
+-- 		style = "minimal",
+-- 		border = "rounded",
+-- 		width = width,
+-- 		height = input_height,
+-- 		row = y,
+-- 		col = x,
+-- 		title = " Search ",
+-- 	})
+--
+-- 	local result_window = vim.api.nvim_open_win(input_buffer, false, { -- take focus from queue
+-- 		relative = "editor",
+-- 		style = "minimal",
+-- 		border = "rounded",
+-- 		width = width,
+-- 		height = result_height,
+-- 		row = y,
+-- 		col = x + input_height,
+-- 		title = " Search ",
+-- 	})
+-- 	vim.bo[result_buffer].modifiable = false
+-- 	vim.wo[result_window].cursorline = true
+-- 	config.style_window(input_window)
+-- 	config.style_window(result_window)
+--
+-- 	require("nmpc.keybind").setup_search_window({
+-- 		input_window,
+-- 		result_window,
+-- 	}, {
+-- 		input_window,
+-- 		result_buffer,
+-- 	})
+-- 	vim.cmd("startinsert")
+-- end
+--
+-- choose = function (window, buffer)
+-- 	local idx = vim.api.nvim_win_get_cursor(window)[1]
+--     local line = vim.api.nvim_buf_get_lines(buffer, idx - 1, idx, false)[1]
+--
+-- 	local id = queue[idx].id
+--
+-- 	mpd.play(id, function (error)
+-- 		vim.schedule(function ()
+-- 			if not error then
+-- 				vim.notify("Now playing: " .. line)
+-- 			else
+-- 				vim.notify("Cant play: " .. line)
+-- 			end
+-- 		end)
+-- 	end)
+-- end
 
 return M

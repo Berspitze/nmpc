@@ -59,8 +59,8 @@ function M.search(query, songs)
 				break
 			end
 		end
-		
-		if ok then 
+
+		if ok then
 			results[#results+1] = song
 		end
 	end
@@ -107,4 +107,11 @@ function M.split_length(length, opts)
 end
 
 
+-- validation
+function M.valid_buffer(b) return b and vim.api.nvim_buf_is_valid(b) end
+function M.valid_window(w) return w and vim.api.nvim_win_is_valid(w) end
+
+
 return M
+
+
