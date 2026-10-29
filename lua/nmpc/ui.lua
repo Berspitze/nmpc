@@ -7,16 +7,16 @@ local keybind    = require("nmpc.keybind")
 
 ---stores viewable songs in queue
 ---@type integer id relates to song_entry_list
-local queue = {}
+local queue_entries = {}
 
 ---stores viewable songs in search
 ---@type [integer, integer] 0: idx into song_entry_list, 1: play(id, _)
-local search = {}
+local search_entries = {}
 
 ---stores all songs with metadata
 ---sorted by .title, .artist, .genre(whole string, not split)
 ---@type SongEntry all necessary song information
-local song_entry_list = {}
+local all_songs_list = {}
 
 local state = {
 	current_state = nil, -- "queue", "search", nil
@@ -41,41 +41,70 @@ function M.init_mpd_data()
 				vim.print("Init MPD failed: \n" .. error)
 			end
 
-			song_entry_list = response
+			for _, data in ipairs(response) do
+				all_songs_list = song_entry.new(data)
+			end
 
-			-- titiel, artist, genre
-			table.sort(song_entry_list, function (a, b)
-				if a.title == b.title then
-					if a.artist == b.artist then
-						if a.genre == b.genre then
-							vim.print("Duplicate Song: " .. a)
-							return true
-						elseif a.genre < b.genre then
-							return true
-						elseif a.genre > b.genre then
-							return false
-						end
-					elseif a.artist < b.artist then
-						return true
-					elseif a.artist > b.artist then
-						return false
-					end
-				elseif a.title < b.title then
-					return true
-				elseif a.title > b.title then
-					return false
+			-- title, artist, genre
+			table.sort(all_songs_list, function (a, b)
+				if a.title ~= b.title then
+					return a.title < b.title
 				end
+				if a.artist ~= b.artist then
+					return a.artist < b.artist
+				end
+				return a.genre < b.genre
 			end)
 
-			
-		end)
-	end)
 
-	mpd.list_queue(function (error, response)
-		vim.schedule(function ()
-			if error then
-				vim.print("Init MPD failed: \n" .. error)
-			end
+			mpd.list_queue(function (queue_error, queue_response)
+				vim.schedule(function ()
+					if queue_error then
+						vim.print("Init MPD failed: \n" .. queue_error)
+					end
+
+					-- search for each song + give index
+					for _, entry in ipairs(queue_response) do
+						song_entry[#song_entry+1] = util.binary_search_index(
+							all_songs_list,
+							entry.title .. " - " .. entry.artist
+						)
+					end
+
+					-- now renders human readable data
+					local display_lines = {}
+					local geometry = util.window_geometry()
+
+					local sizes = util.split_length(
+						geometry.width,
+						config.config.window_search_format.sizes
+					)
+
+					-- fails because of incorrect plugin opts
+					if sizes == nil then
+						error("'window_search_format' incorrect")
+					end
+
+					for _, entry in ipairs(queue_response) do
+						local fmt = {}
+
+						for j, header in ipairs(config.config.window_format.header) do
+							fmt[j] = util.pad_string(
+								tostring(entry[header] or ""),
+								sizes[j],
+								config.config.window_search_format.alignment[j]
+							)
+						end
+						display_lines[#display_lines+1] = table.concat(fmt, " ")
+					end
+
+					vim.bo[state.queue.buffer].modifiable = true
+					vim.api.nvim_buf_set_lines(
+						state.queue.buffer, 0, -1, false, display_lines
+					)
+					vim.bo[state.queue.buffer].modifiable = false
+				end)
+			end)
 		end)
 	end)
 end
@@ -100,25 +129,25 @@ function M.open()
 	local x = math.floor((vim.o.columns - width) / 2)
 	local y = math.floor((vim.o.lines - height) / 2)
 
-	M.init_mpd_data()
 
 	-- already open, just focus it
-	if util.valid_win(state.current_queue.window) then
+	if util.valid_window(state.queue.window) then
 		-- update if term has changed
-		vim.w[state.current_queue.window].width = width
-		vim.w[state.current_queue.window].height = height
-		vim.w[state.current_queue.window].x = x
-		vim.w[state.current_queue.window].y = y
+		vim.w[state.queue.window].width = width
+		vim.w[state.queue.window].height = height
+		vim.w[state.queue.window].x = x
+		vim.w[state.queue.window].y = y
 
 		-- set window to render
-		vim.api.nvim_set_current_win(state.current_queue.window)
+		vim.api.nvim_set_current_win(state.queue.window)
+		M.init_mpd_data()
 
 		return
 	end
 
 	-- initialize for first time then
 	local buffer = vim.api.nvim_create_buf(false, true)
-	state.current_queue.buffer = buffer
+	state.queue.buffer = buffer
 
 	state.queue.window = vim.api.nvim_open_win(buffer, true, {
 		relative = "editor",
@@ -142,6 +171,8 @@ function M.open()
 			end)
 		end,
 	})
+
+	M.init_mpd_data()
 end
 
 -- function M.queue_window()

@@ -71,7 +71,7 @@ end
 ---Splits a number up by an array of opts, "n%" or n
 ---@param length integer total length to be divided
 ---@param opts (string|integer)[] relative or percentage based
----@return table of lengths = #opts
+---@return table|nil of lengths = #opts
 function M.split_length(length, opts)
 	local sizes = {}
 	local remainder = length
@@ -106,6 +106,127 @@ function M.split_length(length, opts)
 	return sizes
 end
 
+---@param entries SongEntry[]
+---@param query string
+---@param field string
+---@return SongEntry[]
+function M.binary_search_all(entries, query, field)
+    local results = {}
+    local target = query:lower()
+    local low, high = 1, #entries
+
+    -- Find first entry >= target
+    while low <= high do
+        local mid = math.floor((low + high) / 2)
+
+        if entries[mid][field]:lower() < target then
+            low = mid + 1
+        else
+            high = mid - 1
+        end
+    end
+
+    -- Collect exact matches
+    for i = low, #entries do
+        local value = entries[i][field]:lower()
+
+        if value ~= target then
+            break
+        end
+
+        table.insert(results, entries[i])
+    end
+
+    return results
+end
+
+
+---Returns the index of a unique SongEntry matching title and artist
+---@param entries SongEntry[]
+---@param query string format: "title - artist"
+---@return integer|nil index
+function M.binary_search_index(entries, query)
+    local title, artist = query:match("^(.-)%s+%-%s+(.+)$")
+
+    if not title or not artist then
+        vim.notify(
+            'Expected query format: "title - artist"',
+            vim.log.levels.WARN
+        )
+        return nil
+    end
+
+    title = title:lower()
+    artist = artist:lower()
+
+    local low, high = 1, #entries
+    local first_match = nil
+
+    -- Find the first entry matching the title.
+    while low <= high do
+        local mid = math.floor((low + high) / 2)
+        local entry_title = (entries[mid].title or ""):lower()
+
+        if entry_title < title then
+            low = mid + 1
+        else
+            if entry_title == title then
+                first_match = mid
+            end
+            high = mid - 1
+        end
+    end
+
+    if not first_match then
+        return nil
+    end
+
+    -- Scan entries sharing the title and match the artist.
+    local match_index = nil
+
+    for i = first_match, #entries do
+        local entry = entries[i]
+
+        if (entry.title or ""):lower() ~= title then
+            break
+        end
+
+        if (entry.artist or ""):lower() == artist then
+            if match_index then
+                vim.notify(
+                    ("Multiple entries found for '%s - %s'"):format(
+                        entry.title, entry.artist
+                    ),
+                    vim.log.levels.WARN
+                )
+                return nil
+            end
+
+            match_index = i
+        end
+    end
+
+    return match_index
+end
+
+---Returns geometry of window
+---@class Geometry
+---@field width integer
+---@field height integer
+---@field x integer
+---@field y integer
+---@return Geometry
+function M.window_geometry()
+	local width = math.floor(vim.o.columns * 0.6)
+	local height = math.floor(vim.o.lines * 0.5)
+
+	return {
+		width = width,
+		height = height,
+		x = math.floor((vim.o.columns - width) / 2),
+		y = math.floor((vim.o.lines - height) / 2)
+	}
+end
 
 -- validation
 function M.valid_buffer(b) return b and vim.api.nvim_buf_is_valid(b) end
